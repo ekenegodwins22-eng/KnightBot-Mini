@@ -1,6 +1,12 @@
 /**
  * WhatsApp MD Bot - Main Entry Point
  */
+// CRITICAL: Prevent Puppeteer/Chromium downloads BEFORE any npm install or library loads
+// Set these environment variables FIRST to prevent any browser downloads
+process.env.PUPPETEER_SKIP_DOWNLOAD = 'true';
+process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = 'true';
+process.env.PUPPETEER_CACHE_DIR = process.env.PUPPETEER_CACHE_DIR || '/tmp/puppeteer_cache_disabled';
+
 // CRITICAL: Initialize temp system BEFORE any libraries that use temp directories
 // This must happen before Baileys, ffmpeg, or any other library loads
 const { initializeTempSystem } = require('./utils/tempManager');
@@ -67,6 +73,23 @@ const handler = require('./handler');
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
+const os = require('os');
+
+// Remove Puppeteer cache (if some dependency downloaded Chromium into ~/.cache/puppeteer)
+function cleanupPuppeteerCache() {
+  try {
+    const home = os.homedir();
+    const cacheDir = path.join(home, '.cache', 'puppeteer');
+
+    if (fs.existsSync(cacheDir)) {
+      console.log('🧹 Removing Puppeteer cache at:', cacheDir);
+      fs.rmSync(cacheDir, { recursive: true, force: true });
+      console.log('✅ Puppeteer cache removed');
+    }
+  } catch (err) {
+    console.error('⚠️ Failed to cleanup Puppeteer cache:', err.message || err);
+  }
+}
 // Optimized in-memory store with hard limits (Map-based for better memory management)
 const store = {
   messages: new Map(), // Use Map instead of plain object
@@ -455,6 +478,10 @@ console.log(`📦 Bot Name: ${config.botName}`);
 console.log(`⚡ Prefix: ${config.prefix}`);
 const ownerNames = Array.isArray(config.ownerName) ? config.ownerName.join(',') : config.ownerName;
 console.log(`👑 Owner: ${ownerNames}\n`);
+
+// Proactively delete Puppeteer cache so it doesn't fill disk on panels
+cleanupPuppeteerCache();
+
 startBot().catch(err => {
   console.error('Error starting bot:', err);
   process.exit(1);
